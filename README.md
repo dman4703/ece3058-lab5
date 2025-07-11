@@ -94,7 +94,7 @@ As you can see, nothing is executing. This is because we have no CPU scheduler t
 
 ## Tips to help you implement the CPU scheduler
 - The main things you will need to do in `Problem 1: FIFO` is: modify `main()`; modify `yield()`, `wake_up()`, `terminate()`, `idle()`, and `schedule()`; and implement a linked list of ready queue and relevant helper functions.
-- For `Problem 2: Round Robin`, you will need to go back and modify some of the functions you implemented in problem 1 and write the `preempt()` functi0n.
+- For `Problem 2: Round Robin`, you will need to go back and modify some of the functions you implemented in problem 1 and write the `preempt()` function.
 
 ### FIFO Tips
 - You will want to declare these static functions at the top of `./src/student.c`:
