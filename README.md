@@ -91,3 +91,87 @@ As you can see, nothing is executing. This is because we have no CPU scheduler t
 ## Deliverables
 - Each Problem has two parts. The first is the actual implementation, and the second is a question linked to the scheduling algorithm you are implementing Make sure you complete both.
 - Keep your answers detailed enough to cover the question, including support from simulator results if appropriate. Don't write a book; but if you're not sure about an answer, err on the side of giving us too much information.
+
+## Tips to help you implement the CPU scheduler
+- The main things you will need to do in `Problem 1: FIFO` is: modify `main()`; modify `yield()`, `wake_up()`, `terminate()`, `idle()`, and `schedule()`; and implement a linked list of ready queue and relevant helper functions.
+- For `Problem 2: Round Robin`, you will need to go back and modify some of the functions you implemented in problem 1 and write the `preempt()` functi0n.
+
+### FIFO Tips
+- You will want to declare these static functions at the top of `./src/student.c`:
+    - `Static pthread_mutex_t queue_mutex`: mutex used for ready queue (recall that we are using a different mutex for ready queue than for current queue).
+    - `Static pthread_cond_t queue_not_empty`
+    - `Static int empty`: set to one
+    - `Static int timeslice = -1`
+    - `Static flag_for_round_robin`: flag to signify we are in round robin state
+    - `Pointer for ready queue`
+
+- `main()`:
+    - Current array and current_mutex are already assigned.
+    - You will want to use similar synatx to `pthread_mutex_init(&current_mutex, NULL)` to initialize `queue_mutex`: `pthread_mutex_init(&queue_mutex, NULL)`
+    - Similarly, initialize `queue_not_empty` using `Pthread_cond_init(&queue_not_empty, NULL)`
+
+- `wake_up()`:
+    - When given a process, mark process as ready and then insert to ready queue.
+    - So we want to look down from the process to the state and set the given process state to ready.
+    - Next, call ready queue adder function and pass in the process. `rq_add(process)` will place the process onto the ready queue
+
+- `yield()`:
+    - Lock current array with current mutex: `pthread_mutex_lock(&current_mutex);`
+    - When locked, index into current array with the given `cpu_id`. You will want to set the particular element you just indexed to waiting (refer to `process_state_t`)
+    - then, unlock `current_mutex`.
+    - finally, schedule a new process for CPU using `schedule(cpu_id)`
+
+- `terminate()`:
+    - similar to `yield()`. Lock current array with current mutex
+    - When locked, index into current array with the given `cpu_id`. You will want to set the particular element you just indexed to terminated
+    - then, unlock `current_mutex`
+    - finally, schedule a new process for CPU using `schedule(cpu_id)`
+
+- `idle()`
+    - want to make use of the variables `Static int empty` and `Static pthread_cond_t queue_not_empty`.
+    - first lock with `&queue_mutex`
+    - have a loop: while `empty`, call `pthread_cond_wait(&queue_not_empty, &queue_mutex)`. `pthread_cond_wait` blocks the calling thread on the given conditional variable, and unlocks the given mutex.
+    - outside of the while loop, unlock `&queue_mutex`
+    - finally, schedule a new process for CPU using `schedule(cpu_id)`
+
+- `schedule()`:
+    - first want to call helper function `rq_remove()`, which selects and removes a runnable process from ready queue and then returns the process.
+    - then, determine if the returned process is runnable by checking if it is not `NULL`.
+    - If it is not null, set the state to running, lock `&current_mutex`, index into current array with the given `cpu_id` and set that particular element to returned process, unlock `current_mutex` and do a context switch.
+    - If the returned process is null, lock `&current_mutex`, index into current array with the given `cpu_id` and set that particular element to `NULL`, unlock `current_mutex` and do a context switch (pass in `NULL` for `*pcb`).
+
+- the ready queue:
+    - Design a struct that holds the pcb's: `queue_t`. In this implementaiton, we dont use pcb as linked-list; instead, we design another struct hosts the pcbs and form a linked list with our new struct. this will make implementing round robin easier.
+    ```
+    typedef struct _queue_t {
+        pcb_t *pcb;
+        struct _queue_t *next;
+    } queue_t;
+    ```
+    - `rq*` points to head of linked list of type `queue_t`
+
+- `rq_add()`:
+    - first need to lock `&queue_mutex` then do the necessary steps to add the given `*pcb` to the end of the linked list
+        - if linked list empty, you need to : `malloc(sizeof(queue_t))`, set `*pcb` to incoming process, set `*next` to `NULL`, and adjust `*rq` to point to this newly allocated structure.
+        - if the linked list is not empty, you need to: crawl to the tail, `malloc(sizeof(queue_t))`, set `*pcb` to incoming process, set `*next` to `NULL`, and adjust the previous tail to point to this newly allocated structure.
+    - set `empty = 0`
+    - signal `&queue_not_empty` should be on. This is done by calling `pthread_cond_signal(&queue_not_empty);`
+    - finally, unlock
+- `rq_remove()`:
+    - lock `&queue_mutex`
+    - get first item of list (if any), adjust `rq*` to point to `rq->next`
+    - if `*rq` is now `NULL`, set empty flag
+    - return the first item's pcb, or `NULL` if `rq*` was empty in the first place
+    - unlock
+
+### Round Robin Tips
+- `preempt()`:
+    - lock `&current_mutex`
+    - intex into current array with the given `cpu_id`. Set the state to ready. Call helper function to add process to linked list (places current unfinished process back into rq)
+    - unlock `&current_mutex`
+    - schedule `cpu_id` for something to do.
+- modify `main()` to handle additional command line arguments
+    - possible inputs:
+        - `./os-sim <# num CPUs>`: Default FIFO
+        - `./os-sim <# num CPUs> -r <timeslice>`: Round Robin
+            - If `argc=4`, `round_robin_flag` is on. But as an extra layer of protection, you want to check if the extra argument is actually an `r`. You can do this by comparing `-r` using `Strcmp('-r', ...)`. Note `Strcmp()` returns reverse logic, i.e. if the strings match then it returns `0`.
