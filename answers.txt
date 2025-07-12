@@ -2,7 +2,7 @@ ECE 3058
 Thread Scheduling Lab
 
 Name: Devon O'Quinn
-GT Username:
+GT Username: doquinn3
 
 Problem 1B
 ----------
@@ -16,5 +16,8 @@ the execution time can not linearly decrease.
 Problem 2B
 ----------
 
-/* Fix me */
+For timeslices of 800ms, 600ms, 400ms, and 200ms, the time in READY was 328.5 s, 313.9 s, 300.0 s, and 283.4 s respectively. 
+This shows that the total waiting time decreases with shorter timeslices. However, shorter timeslices also increases the number
+of context switches, creating more overhead. Thus, in a real OS, it is more optimal to choose a moderate timeslice to balance
+overhead and responsiveness. 
 
