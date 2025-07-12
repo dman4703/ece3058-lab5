@@ -1,13 +1,17 @@
 ECE 3058
 Thread Scheduling Lab
 
-Name:
+Name: Devon O'Quinn
 GT Username:
 
 Problem 1B
 ----------
 
-/* Fix me */
+With 1 CPU the simulation ran for 67.6 s. Using 2 CPUs it ran for 36.2 s. 
+With 4 CPUs, it was 33.6 s. Increasing the num of CPUs decreased the total execution time,
+but this reduction was not linear. This is because not all work can be done in parallel, and
+because there is extra overhead as more CPUs are added (such as context switches). Thus,
+the execution time can not linearly decrease.
 
 Problem 2B
 ----------
