@@ -9,7 +9,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <string.h>
 #include "os-sim.h"
 
 // rq struct
@@ -162,7 +162,14 @@ extern void idle(unsigned int cpu_id)
  */
 extern void preempt(unsigned int cpu_id)
 {
-    /* FIX ME */
+    pthread_mutex_lock(&current_mutex);
+    pcb_t *proc = current[cpu_id];
+    if (proc != NULL) {
+        proc->state = PROCESS_READY;
+        rq_add(proc);
+    }
+    pthread_mutex_unlock(&current_mutex);
+    schedule(cpu_id);
 }
 
 
@@ -234,7 +241,7 @@ int main(int argc, char *argv[])
     unsigned int cpu_count;
 
     /* Parse command-line arguments */
-    if (argc != 2)
+    if (argc != 2 && argc != 4)
     {
         fprintf(stderr, "Multithreaded OS Simulator\n"
             "Usage: ./os-sim <# CPUs> [ -l | -r <time slice> ]\n"
@@ -246,6 +253,10 @@ int main(int argc, char *argv[])
     cpu_count = strtoul(argv[1], NULL, 0);
 
     /* FIX ME - Add support for -l and -r parameters*/
+    if (argc == 4 && (strcmp("-r", argv[2]) == 0)) {
+        round_robin_flag = 1;
+        timeslice = (int)strtoul(argv[3], NULL, 0);
+    }
 
     /* Allocate the current[] array and its mutex */
     current = malloc(sizeof(pcb_t*) * cpu_count);
