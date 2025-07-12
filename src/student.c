@@ -12,6 +12,19 @@
 
 #include "os-sim.h"
 
+// rq struct
+typedef struct _queue_t {
+    pcb_t *pcb;
+    struct _queue_t *next;
+} queue_t;
+static queue_t *rq = NULL;
+
+static pthread_mutex_t queue_mutex;
+static pthread_cond_t queue_not_empty;
+static int empty = 1;
+static int timeslice = -1;
+static int round_robin_flag __attribute__((unused)) = 0;
+
 /** Function prototypes **/
 extern void idle(unsigned int cpu_id);
 extern void preempt(unsigned int cpu_id);
@@ -32,6 +45,47 @@ extern void wake_up(pcb_t *process);
 static pcb_t **current;
 static pthread_mutex_t current_mutex;
 
+// helper function to add pcb to tail of rq
+static void rq_add(pcb_t *pcb)
+{
+    queue_t *newNode = malloc(sizeof(queue_t));
+    newNode->pcb = pcb;
+    newNode->next = NULL;
+
+    pthread_mutex_lock(&queue_mutex);
+
+    if (rq == NULL) {
+        rq = newNode;
+    } else {
+        queue_t *tail = rq;
+        while (tail->next != NULL)
+            tail = tail->next;
+        tail->next = newNode;
+    }
+    empty = 0;
+    pthread_cond_signal(&queue_not_empty);
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+// helper function to pop pcb from head of rq
+static pcb_t *rq_remove()
+{
+    pthread_mutex_lock(&queue_mutex);
+
+    if (rq == NULL) {
+        pthread_mutex_unlock(&queue_mutex);
+        return NULL;
+    }
+    queue_t *node = rq;
+    rq = rq->next;
+    if (rq == NULL) {
+        empty = 1;
+    }
+    pcb_t *pcb = node->pcb;
+    free(node);
+    pthread_mutex_unlock(&queue_mutex);
+    return pcb;
+}
 
 /*
  * schedule() is your CPU scheduler.  It should perform the following tasks:
@@ -51,7 +105,20 @@ static pthread_mutex_t current_mutex;
  */
 static void schedule(unsigned int cpu_id)
 {
-    /* FIX ME */
+    pcb_t *next_pcb = rq_remove();
+
+    if (next_pcb != NULL) {
+        next_pcb->state = PROCESS_RUNNING;
+        pthread_mutex_lock(&current_mutex);
+        current[cpu_id] = next_pcb;
+        pthread_mutex_unlock(&current_mutex);
+        context_switch(cpu_id, next_pcb, timeslice);
+    } else {
+        pthread_mutex_lock(&current_mutex);
+        current[cpu_id] = NULL;
+        pthread_mutex_unlock(&current_mutex);
+        context_switch(cpu_id, NULL, -1);
+    }
 }
 
 
@@ -65,7 +132,7 @@ static void schedule(unsigned int cpu_id)
 extern void idle(unsigned int cpu_id)
 {
     /* FIX ME */
-    schedule(0);
+    // schedule(0);
 
     /*
      * REMOVE THE LINE BELOW AFTER IMPLEMENTING IDLE()
@@ -76,7 +143,13 @@ extern void idle(unsigned int cpu_id)
      * you implement a proper idle() function using a condition variable,
      * remove the call to mt_safe_usleep() below.
      */
-    mt_safe_usleep(1000000);
+    // mt_safe_usleep(1000000);
+    pthread_mutex_lock(&queue_mutex);
+    while (empty) {
+        pthread_cond_wait(&queue_not_empty, &queue_mutex);
+    }
+    pthread_mutex_unlock(&queue_mutex);
+    schedule(cpu_id);
 }
 
 
@@ -102,7 +175,13 @@ extern void preempt(unsigned int cpu_id)
  */
 extern void yield(unsigned int cpu_id)
 {
-    /* FIX ME */
+    pthread_mutex_lock(&current_mutex);
+    pcb_t *proc = current[cpu_id];
+    if (proc != NULL) {
+        proc->state = PROCESS_WAITING;
+    }
+    pthread_mutex_unlock(&current_mutex);
+    schedule(cpu_id);
 }
 
 
@@ -113,7 +192,13 @@ extern void yield(unsigned int cpu_id)
  */
 extern void terminate(unsigned int cpu_id)
 {
-    /* FIX ME */
+    pthread_mutex_lock(&current_mutex);
+    pcb_t *proc = current[cpu_id];
+    if (proc != NULL) {
+        proc->state = PROCESS_TERMINATED;
+    }
+    pthread_mutex_unlock(&current_mutex);
+    schedule(cpu_id);
 }
 
 
@@ -135,7 +220,8 @@ extern void terminate(unsigned int cpu_id)
  */
 extern void wake_up(pcb_t *process)
 {
-    /* FIX ME */
+    process->state = PROCESS_READY;
+    rq_add(process);
 }
 
 
@@ -165,6 +251,9 @@ int main(int argc, char *argv[])
     current = malloc(sizeof(pcb_t*) * cpu_count);
     assert(current != NULL);
     pthread_mutex_init(&current_mutex, NULL);
+    // allocate queue_mutex
+    pthread_mutex_init(&queue_mutex, NULL);
+    pthread_cond_init(&queue_not_empty, NULL);
 
     /* Start the simulator in the library */
     start_simulator(cpu_count);
